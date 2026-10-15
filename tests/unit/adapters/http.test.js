@@ -440,6 +440,41 @@ describe('supports http with nodejs', () => {
     }
   });
 
+  it('should strip a UTF-8 BOM for every spelling of the utf8 responseEncoding', async () => {
+    const data = { firstName: 'Fred' };
+
+    const server = await startHTTPServer(
+      (req, res) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(JSON.stringify(data))])
+        );
+      },
+      { port: SERVER_PORT }
+    );
+
+    try {
+      for (const responseEncoding of ['utf8', 'utf-8', 'UTF-8', 'UTF8']) {
+        const { data: responseData } = await axios.get(
+          `http://localhost:${server.address().port}`,
+          { responseEncoding }
+        );
+        assert.deepStrictEqual(responseData, data, `responseEncoding: ${responseEncoding}`);
+      }
+    } finally {
+      await stopHTTPServer(server);
+    }
+  });
+
+  it('should strip a UTF-8 BOM from text data URLs for every spelling of utf8', async () => {
+    const dataURI = 'data:text/plain;base64,' + Buffer.from('\uFEFFhello').toString('base64');
+
+    for (const responseEncoding of ['utf8', 'utf-8', 'UTF-8']) {
+      const { data } = await axios.get(dataURI, { responseType: 'text', responseEncoding });
+      assert.strictEqual(data, 'hello', `responseEncoding: ${responseEncoding}`);
+    }
+  });
+
   it('should redirect', async () => {
     const expectedResponse = 'test response';
     const server = await startHTTPServer(
